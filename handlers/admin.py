@@ -39,7 +39,7 @@ from utils.constants import (
     ADMIN_SETTINGS_MESSAGE,
     BOT_NAME,
 )
-from utils.helpers import format_balance, format_date, format_datetime, mask_key
+from utils.helpers import format_balance, format_date, format_datetime, mask_key, parse_datetime
 from services.xui_api import XuiService, check_server_connection
 
 router = Router()
@@ -166,7 +166,8 @@ async def admin_search_user(message: Message, state: FSMContext):
     # Формируем информацию
     status = "Активен" if user.get("status") == "active" else user.get("status", "Неизвестно")
     if user.get("expires_at"):
-        if user["expires_at"] > datetime.utcnow():
+        expires_dt = parse_datetime(user["expires_at"])
+        if expires_dt and expires_dt > datetime.utcnow():
             status = f"Активен до {format_date(user['expires_at'])}"
         else:
             status = "Истек"
@@ -352,8 +353,9 @@ async def admin_process_extend_days(message: Message, state: FSMContext):
     user = await queries.get_user(target_user_id)
     
     # Вычисляем новую дату
-    if user.get("expires_at") and user["expires_at"] > datetime.utcnow():
-        new_expires = user["expires_at"] + timedelta(days=days)
+    expires_dt = parse_datetime(user.get("expires_at"))
+    if expires_dt and expires_dt > datetime.utcnow():
+        new_expires = expires_dt + timedelta(days=days)
     else:
         new_expires = datetime.utcnow() + timedelta(days=days)
     
@@ -454,8 +456,9 @@ async def callback_admin_reset_key(callback: CallbackQuery):
         
         # Вычисляем оставшиеся дни
         days = 30
-        if user.get("expires_at"):
-            days_left = (user["expires_at"] - datetime.utcnow()).days
+        expires_dt = parse_datetime(user.get("expires_at"))
+        if expires_dt:
+            days_left = (expires_dt - datetime.utcnow()).days
             days = max(1, days_left)
         
         key_data = await xui.create_client(user_id, days=days)
