@@ -159,6 +159,34 @@ def get_status_text(status: str, expires_at=None) -> str:
     return status_map.get(status, STATUS_EXPIRED)
 
 
+def parse_datetime(dt):
+    """
+    Парсинг даты из строки или datetime объекта.
+    
+    Args:
+        dt: Строка ISO формата или datetime объект
+        
+    Returns:
+        datetime объект или None
+    """
+    if dt is None:
+        return None
+    
+    if isinstance(dt, datetime):
+        return dt
+    
+    if isinstance(dt, str):
+        try:
+            dt = dt.replace("T", " ")
+            if "." in dt:
+                dt = dt.split(".")[0]
+            return datetime.strptime(dt, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, AttributeError):
+            return None
+    
+    return None
+
+
 def format_traffic(bytes_used: int, bytes_total: Optional[int] = None) -> str:
     """
     Форматирование трафика.
