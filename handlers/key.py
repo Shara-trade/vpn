@@ -23,7 +23,7 @@ from utils.constants import (
     SERVERS_LIST_MESSAGE,
     BOT_NAME,
 )
-from utils.helpers import mask_key
+from utils.helpers import mask_key, parse_datetime
 from utils.validators import validate_vless_key
 from services.xui_api import XuiService
 
@@ -202,8 +202,9 @@ async def callback_regenerate_key(callback: CallbackQuery, db_user: dict = None)
         xui = XuiService(server)
         
         # Вычисляем оставшиеся дни
-        if db_user.get("expires_at"):
-            days_left = (db_user["expires_at"] - datetime.utcnow()).days
+        expires_dt = parse_datetime(db_user.get("expires_at"))
+        if expires_dt:
+            days_left = (expires_dt - datetime.utcnow()).days
             days_left = max(1, days_left)
         else:
             days_left = 30
@@ -235,9 +236,9 @@ async def callback_regenerate_key(callback: CallbackQuery, db_user: dict = None)
             "✅ Новый ключ сгенерирован!",
             show_alert=True
         )
-        
+
         logger.info(f"Ключ обновлен: user_id={user_id}")
-        
+
     except Exception as e:
         logger.error(f"Ошибка при регенерации ключа: {e}")
         await callback.answer(
@@ -306,8 +307,9 @@ async def callback_select_server(callback: CallbackQuery, db_user: dict = None):
         xui = XuiService(server)
         
         # Вычисляем оставшиеся дни
-        if db_user.get("expires_at"):
-            days_left = (db_user["expires_at"] - datetime.utcnow()).days
+        expires_dt = parse_datetime(db_user.get("expires_at"))
+        if expires_dt:
+            days_left = (expires_dt - datetime.utcnow()).days
             days_left = max(1, days_left)
         else:
             days_left = 30
