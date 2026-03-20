@@ -20,12 +20,12 @@ def format_balance(kopecks: int) -> str:
     return f"{rubles:,.0f}".replace(",", " ")
 
 
-def format_date(dt: datetime, format_str: str = "%d.%m.%Y") -> str:
+def format_date(dt, format_str: str = "%d.%m.%Y") -> str:
     """
     Форматирование даты.
     
     Args:
-        dt: Объект datetime
+        dt: Объект datetime или строка ISO формата
         format_str: Формат вывода
         
     Returns:
@@ -33,15 +33,27 @@ def format_date(dt: datetime, format_str: str = "%d.%m.%Y") -> str:
     """
     if dt is None:
         return "Не указано"
+    
+    # Если это строка - парсим в datetime
+    if isinstance(dt, str):
+        try:
+            # SQLite формат: "2024-01-15 10:30:00" или "2024-01-15T10:30:00"
+            dt = dt.replace("T", " ")
+            if "." in dt:
+                dt = dt.split(".")[0]  # Убираем миллисекунды
+            dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, AttributeError):
+            return dt  # Возвращаем как есть если не удалось распарсить
+    
     return dt.strftime(format_str)
 
 
-def format_datetime(dt: datetime, format_str: str = "%d.%m.%Y %H:%M") -> str:
+def format_datetime(dt, format_str: str = "%d.%m.%Y %H:%M") -> str:
     """
     Форматирование даты и времени.
     
     Args:
-        dt: Объект datetime
+        dt: Объект datetime или строка ISO формата
         format_str: Формат вывода
         
     Returns:
@@ -49,6 +61,17 @@ def format_datetime(dt: datetime, format_str: str = "%d.%m.%Y %H:%M") -> str:
     """
     if dt is None:
         return "Не указано"
+    
+    # Если это строка - парсим в datetime
+    if isinstance(dt, str):
+        try:
+            dt = dt.replace("T", " ")
+            if "." in dt:
+                dt = dt.split(".")[0]
+            dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, AttributeError):
+            return dt
+    
     return dt.strftime(format_str)
 
 
@@ -98,13 +121,13 @@ def parse_referral_code(code: str) -> Optional[int]:
     return None
 
 
-def get_status_text(status: str, expires_at: Optional[datetime] = None) -> str:
+def get_status_text(status: str, expires_at=None) -> str:
     """
     Получение текстового представления статуса.
     
     Args:
         status: Статус пользователя
-        expires_at: Дата истечения подписки
+        expires_at: Дата истечения подписки (datetime или строка)
         
     Returns:
         Текст статуса
@@ -117,8 +140,21 @@ def get_status_text(status: str, expires_at: Optional[datetime] = None) -> str:
         "blocked": STATUS_BLOCKED,
     }
     
-    if expires_at and expires_at < datetime.utcnow():
-        return STATUS_EXPIRED
+    # Проверяем истечение подписки
+    if expires_at:
+        # Если строка - парсим в datetime
+        if isinstance(expires_at, str):
+            try:
+                expires_at = expires_at.replace("T", " ")
+                if "." in expires_at:
+                    expires_at = expires_at.split(".")[0]
+                expires_at = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+            except (ValueError, AttributeError):
+                pass
+        
+        # Сравниваем с текущим временем
+        if isinstance(expires_at, datetime) and expires_at < datetime.utcnow():
+            return STATUS_EXPIRED
     
     return status_map.get(status, STATUS_EXPIRED)
 
