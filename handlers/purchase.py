@@ -24,7 +24,7 @@ from utils.constants import (
     PURCHASE_ERROR_MESSAGE,
     BOT_NAME,
 )
-from utils.helpers import format_balance, format_date
+from utils.helpers import format_balance, format_date, parse_datetime
 from services.xui_api import XuiService, XuiError
 
 router = Router()
@@ -197,9 +197,10 @@ async def callback_confirm_purchase(callback: CallbackQuery, db_user: dict = Non
         # ===== 2. ВЫЧИСЛЯЕМ ДАТУ ИСТЕЧЕНИЯ =====
         days = 30 * tariff["months"]
         
-        if db_user.get("expires_at") and db_user["expires_at"] > datetime.utcnow():
+        expires_dt = parse_datetime(db_user.get("expires_at"))
+        if expires_dt and expires_dt > datetime.utcnow():
             # Продлеваем с текущей даты истечения
-            expires_at = db_user["expires_at"] + timedelta(days=days)
+            expires_at = expires_dt + timedelta(days=days)
         else:
             # Новая подписка с текущего момента
             expires_at = datetime.utcnow() + timedelta(days=days)
