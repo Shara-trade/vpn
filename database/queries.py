@@ -172,11 +172,22 @@ async def set_user_status(user_id: int, status: str) -> None:
         user_id: Telegram ID пользователя
         status: Новый статус
     """
-    await db.execute(
+    from loguru import logger
+    logger.info(f"[DB] Установка статуса '{status}' для пользователя {user_id}")
+    
+    result = await db.execute(
         "UPDATE users SET status = ? WHERE user_id = ?",
         (status, user_id)
     )
+    logger.debug(f"[DB] Результат UPDATE: lastrowid={result}")
 
+    # Проверяем, что статус действительно изменился
+    user = await get_user(user_id)
+    if user:
+        logger.info(f"[DB] Проверка: статус пользователя {user_id} = {user.get('status')}")
+    else:
+        logger.warning(f"[DB] Пользователь {user_id} не найден после UPDATE!")
+    
 
 async def set_trial_used(user_id: int) -> None:
     """
@@ -225,7 +236,7 @@ async def get_expired_users() -> List[Dict]:
         AND status = 'active'
         """
     )
-
+    
 
 async def get_all_users() -> List[Dict]:
     """Получение всех пользователей."""
@@ -242,14 +253,14 @@ async def get_active_users_today() -> int:
     return await db.fetchval(
         "SELECT COUNT(*) FROM users WHERE date(last_activity) = date('now')"
     )
-
+    
 
 async def get_new_users_today() -> int:
     """Получение количества новых пользователей за сегодня."""
     return await db.fetchval(
         "SELECT COUNT(*) FROM users WHERE date(registered_at) = date('now')"
     )
-
+    
 
 # ================== СЕРВЕРЫ ==================
 
