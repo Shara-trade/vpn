@@ -8,16 +8,19 @@ from typing import List, Dict
 
 # ================== ПОЛЬЗОВАТЕЛИ ==================
 
-def get_user_actions_keyboard(user_id: int) -> InlineKeyboardMarkup:
+def get_user_actions_keyboard(user_id: int, is_blocked: bool = False) -> InlineKeyboardMarkup:
     """
     Клавиатура действий с пользователем.
     
     Args:
         user_id: Telegram ID пользователя
+        is_blocked: Заблокирован ли пользователь
         
     Returns:
         InlineKeyboardMarkup с кнопками действий
     """
+    block_text = "✅ Разблокировать" if is_blocked else "➖ Заблокировать"
+    
     keyboard = [
         [
             InlineKeyboardButton(
@@ -41,7 +44,7 @@ def get_user_actions_keyboard(user_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="➖ Заблокировать",
+                text=block_text,
                 callback_data=f"admin_block_{user_id}"
             ),
             InlineKeyboardButton(
