@@ -7,6 +7,8 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Message, CallbackQuery
 from loguru import logger
 
+from config import config
+
 
 class BlockedUserMiddleware(BaseMiddleware):
     """
@@ -23,9 +25,26 @@ class BlockedUserMiddleware(BaseMiddleware):
         """
         Выполнение middleware.
         """
+        # Получаем пользователя из события
+        user = data.get("event_from_user")
+        
+        # Если пользователя нет в событии — пропускаем
+        if not user:
+            return await handler(event, data)
+        
+        # Админы не блокируются
+        if user.id in config.ADMIN_IDS:
+            return await handler(event, data)
+        
+        # Проверяем статус пользователя в БД
         db_user = data.get("db_user")
         
-        if db_user and db_user.get("status") == "blocked":
+        # Если пользователя нет в БД — пропускаем (новый пользователь)
+        if not db_user:
+            return await handler(event, data)
+        
+        # Проверяем блокировку
+        if db_user.get("status") == "blocked":
             if isinstance(event, Message):
                 # Игнорируем команду /start для заблокированных
                 if event.text and event.text.startswith("/start"):
@@ -45,3 +64,6 @@ class BlockedUserMiddleware(BaseMiddleware):
                 return None
         
         return await handler(event, data)
+
+        # Проверяем статус пользователя
+        
