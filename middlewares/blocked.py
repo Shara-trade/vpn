@@ -43,8 +43,13 @@ class BlockedUserMiddleware(BaseMiddleware):
         if not db_user:
             return await handler(event, data)
         
+        user_status = db_user.get("status")
+        logger.debug(f"[BlockedMiddleware] user={user.id}, status={user_status}")
+        
         # Проверяем блокировку
-        if db_user.get("status") == "blocked":
+        if user_status == "blocked":
+            logger.info(f"[BlockedMiddleware] Заблокированный пользователь {user.id} пытался взаимодействовать")
+            
             if isinstance(event, Message):
                 # Игнорируем команду /start для заблокированных
                 if event.text and event.text.startswith("/start"):
@@ -65,5 +70,6 @@ class BlockedUserMiddleware(BaseMiddleware):
         
         return await handler(event, data)
 
-        # Проверяем статус пользователя
+        # Админы не блокируются
+
         
