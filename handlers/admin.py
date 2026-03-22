@@ -178,12 +178,16 @@ async def admin_search_user(message: Message, state: FSMContext):
     
     # Формируем информацию - упрощенный статус
     expires_dt = parse_datetime(user.get("expires_at"))
-    if expires_dt and expires_dt > datetime.utcnow():
+    if user.get("status") == "blocked":
+        status = "🚫 Заблокирован"
+    elif expires_dt and expires_dt > datetime.utcnow():
         status = "💎 Статус: Активен"
     else:
         status = "💎 Статус: Не активна"
     
     key_preview = mask_key(user.get("current_key", "Нет"))
+    
+    is_blocked = user.get("status") == "blocked"
     
     await message.answer(
         ADMIN_USER_INFO.format(
@@ -195,7 +199,7 @@ async def admin_search_user(message: Message, state: FSMContext):
             balance=format_balance(user.get("balance", 0)),
             key_preview=key_preview
         ),
-        reply_markup=get_user_actions_keyboard(user["user_id"])
+        reply_markup=get_user_actions_keyboard(user["user_id"], is_blocked=is_blocked)
     )
 
     await state.clear()
@@ -262,7 +266,7 @@ async def admin_process_balance_amount(message: Message, state: FSMContext):
         f"Новый баланс: {format_balance(new_balance)} ₽",
         reply_markup=get_admin_balance_confirm_keyboard(amount_kopecks, target_user_id)
     )
-    
+
 
 @router.callback_query(F.data.startswith("admin_confirm_add_"))
 async def callback_admin_confirm_add(callback: CallbackQuery, state: FSMContext, bot: Bot):
@@ -298,7 +302,7 @@ async def callback_admin_confirm_add(callback: CallbackQuery, state: FSMContext,
             new_balance=format_balance(new_balance)
         )
     )
-    
+
     # Уведомление пользователю
     try:
         await bot.send_message(
@@ -314,7 +318,7 @@ async def callback_admin_confirm_add(callback: CallbackQuery, state: FSMContext,
     
     await state.clear()
     await callback.answer("✅ Баланс пополнен")
-    
+
     logger.info(
         f"Админ пополнил баланс: admin={admin_id}, user={target_user_id}, amount={amount}"
     )
@@ -389,23 +393,50 @@ async def admin_process_extend_days(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("admin_block_"))
 async def callback_admin_block(callback: CallbackQuery, bot: Bot):
-    """Блокировка пользователя."""
+    """Блокировка/разблокировка пользователя."""
     if not is_admin(callback.from_user.id):
         return
     
     user_id = int(callback.data.split("_")[2])
     admin_id = callback.from_user.id
     
+    # Проверяем, не является ли пользователь админом
+    if user_id in config.ADMIN_IDS:
+        await callback.answer(
+            "❌ Нельзя заблокировать администратора!",
+            show_alert=True
+        )
+        return
+    
     user = await queries.get_user(user_id)
     
     if user.get("status") == "blocked":
         # Разблокируем
         await queries.set_user_status(user_id, "active")
+        
+        # Логируем
+        await queries.add_log(
+            category="admin",
+            action="user_unblocked",
+            user_id=admin_id,
+            target_user_id=user_id
+        )
+        
+        # Уведомляем пользователя
+        try:
+            await bot.send_message(
+                user_id,
+                "✅ Твой доступ к StarinaVPN восстановлен!\n\n"
+                "Ты снова можешь пользоваться сервисом."
+            )
+        except Exception:
+            pass
+        
         await callback.answer("✅ Пользователь разблокирован", show_alert=True)
         
-        # Обновляем кнопки
+        # Обновляем кнопки (теперь is_blocked=False)
         await callback.message.edit_reply_markup(
-            reply_markup=get_user_actions_keyboard(user_id)
+            reply_markup=get_user_actions_keyboard(user_id, is_blocked=False)
         )
     else:
         # Блокируем
@@ -421,17 +452,30 @@ async def callback_admin_block(callback: CallbackQuery, bot: Bot):
                 except Exception as e:
                     logger.error(f"Ошибка удаления ключа: {e}")
         
-        await callback.answer("✅ Пользователь заблокирован", show_alert=True)
+        # Логируем
+        await queries.add_log(
+            category="admin",
+            action="user_blocked",
+            user_id=admin_id,
+            target_user_id=user_id
+        )
         
         # Уведомляем пользователя
         try:
             await bot.send_message(
                 user_id,
-                "❌ Твой доступ к VPN был заблокирован администратором.\n\n"
-                "Если считаешь это ошибкой, напиши в поддержку."
+                "🚫 Твой доступ к StarinaVPN заблокирован.\n\n"
+                "Для восстановления доступа обратитесь к администратору: @StarinaVPN_Support"
             )
         except Exception:
             pass
+        
+        await callback.answer("✅ Пользователь заблокирован", show_alert=True)
+        
+        # Обновляем кнопки (теперь is_blocked=True)
+        await callback.message.edit_reply_markup(
+            reply_markup=get_user_actions_keyboard(user_id, is_blocked=True)
+        )
     
     logger.info(f"Админ изменил статус: user={user_id}, admin={admin_id}")
 
@@ -1453,6 +1497,10 @@ async def admin_create_promo_value(message: Message, state: FSMContext):
         )
         return
     
+    # Конвертация в копейки для денежных типов
+    if promo_type in ["discount_fixed", "balance"]:
+        value = value * 100  # рубли -> копейки
+    
     await state.update_data(promo_value=value)
     
     await message.answer(
@@ -1540,12 +1588,17 @@ async def admin_create_promo_expires(message: Message, state: FSMContext):
         }
     )
     
+    # Формируем отображаемое значение (в рублях для денежных типов)
+    display_value = data["promo_value"]
+    if data["promo_type"] in ["discount_fixed", "balance"]:
+        display_value = data["promo_value"] // 100  # копейки -> рубли для отображения
+    
     type_names = {
-        "discount_percent": f"Скидка {data['promo_value']}%",
-        "discount_fixed": f"Скидка {data['promo_value']} ₽",
-        "free_days": f"{data['promo_value']} бесплатных дней",
-        "balance": f"Начисление {data['promo_value']} ₽ на баланс",
-        "subscription_extension": f"Продление на {data['promo_value']} дней"
+        "discount_percent": f"Скидка {display_value}%",
+        "discount_fixed": f"Скидка {display_value} ₽",
+        "free_days": f"{display_value} бесплатных дней",
+        "balance": f"Начисление {display_value} ₽ на баланс",
+        "subscription_extension": f"Продление на {display_value} дней"
     }
     
     await message.answer(
