@@ -1,5 +1,5 @@
 """
-Точка входа в бота FreakVPN.
+Точка входа в бота StarinaVPN.
 """
 
 import asyncio
@@ -9,11 +9,27 @@ from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BotCommand
 from loguru import logger
 
 from config import config
 from database import init_db
 from middlewares import RegistrationMiddleware, ThrottleMiddleware
+from middlewares.blocked import BlockedUserMiddleware
+
+
+async def set_commands(bot: Bot) -> None:
+    """Установка команд бота для отображения в меню."""
+    commands = [
+        BotCommand(command="start", description="Запуск бота"),
+        BotCommand(command="help", description="Справка по использованию"),
+        BotCommand(command="profile", description="Мой профиль и баланс"),
+        BotCommand(command="key", description="Мой VPN ключ"),
+        BotCommand(command="support", description="Связь с поддержкой"),
+        BotCommand(command="menu", description="Главное меню"),
+    ]
+    await bot.set_my_commands(commands)
+    logger.info("Команды бота зарегистрированы")
 
 
 def setup_logging() -> None:
@@ -51,7 +67,7 @@ async def main() -> None:
     # Настраиваем логирование
     setup_logging()
     
-    logger.info("Запуск FreakVPN бота...")
+    logger.info("Запуск StarinaVPN бота...")
     
     # Проверяем конфигурацию
     try:
@@ -67,12 +83,16 @@ async def main() -> None:
     )
     dp = Dispatcher()
     
-    # Регистрируем middleware
+    # Регистрируем middleware (порядок важен!)
     dp.update.middleware(RegistrationMiddleware())
+    dp.update.middleware(BlockedUserMiddleware())
     dp.update.middleware(ThrottleMiddleware(rate_limit=0.5, burst_limit=5))
     
     # Инициализируем базу данных
     await init_db()
+    
+    # Устанавливаем команды бота
+    await set_commands(bot)
     
     # Регистрируем роутеры (хендлеры)
     from handlers import start, menu, profile, key, purchase, callbacks, admin
