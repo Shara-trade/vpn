@@ -1,50 +1,139 @@
 """
-Конфигурация бота FreakVPN.
-Все настройки загружаются из переменных окружения.
+Точка входа в бота StarinaVPN.
 """
 
-import os
-from typing import List
-from dotenv import load_dotenv
+import asyncio
+import sys
+from pathlib import Path
 
-load_dotenv()
+from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BotCommand
+from loguru import logger
 
-
-class Config:
-    """Класс конфигурации бота."""
-    
-    # Telegram
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
-    ADMIN_IDS: List[int] = [
-        int(id.strip()) 
-        for id in os.getenv("ADMIN_IDS", "").split(",") 
-        if id.strip()
-    ]
-    
-    # Пробный период и рефералы
-    DEFAULT_TRIAL_DAYS: int = int(os.getenv("DEFAULT_TRIAL_DAYS", "3"))
-    DEFAULT_REFERRAL_BONUS: int = int(os.getenv("DEFAULT_REFERRAL_BONUS", "5000"))  # в копейках
-    
-    # База данных
-    DATABASE_PATH: str = os.getenv("DATABASE_PATH", "freakvpn.db")
-    
-    # X-UI настройки
-    XUI_DEFAULT_PORT: int = int(os.getenv("XUI_DEFAULT_PORT", "54321"))
-    XUI_DEFAULT_PROTOCOL: str = os.getenv("XUI_DEFAULT_PROTOCOL", "vless")
-    
-    # Системные
-    TIMEZONE: str = os.getenv("TIMEZONE", "Europe/Moscow")
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-    
-    @classmethod
-    def validate(cls) -> bool:
-        """Проверка обязательных настроек."""
-        if not cls.BOT_TOKEN:
-            raise ValueError("BOT_TOKEN не указан в .env файле")
-        if not cls.ADMIN_IDS:
-            raise ValueError("ADMIN_IDS не указаны в .env файле")
-        return True
+from config import config
+from database import init_db
+from middlewares import RegistrationMiddleware, ThrottleMiddleware
+from middlewares.blocked import BlockedUserMiddleware, CancelHandler
 
 
-# Глобальный экземпляр конфигурации
-config = Config()
+async def set_commands(bot: Bot) -> None:
+	"""Установка команд бота для отображения в меню."""
+	commands = [
+		BotCommand(command="start", description="Запуск бота"),
+		BotCommand(command="help", description="Справка по использованию"),
+		BotCommand(command="profile", description="Мой профиль и баланс"),
+		BotCommand(command="key", description="Мой VPN ключ"),
+		BotCommand(command="support", description="Связь с поддержкой"),
+		BotCommand(command="menu", description="Главное меню"),
+	]
+	await bot.set_my_commands(commands)
+	logger.info("Команды бота зарегистрированы")
+
+
+def setup_logging() -> None:
+	"""Настройка логирования."""
+	# Удаляем стандартный обработчик
+	logger.remove()
+	
+	# Добавляем обработчик для консоли
+	logger.add(
+		sys.stdout,
+		level=config.LOG_LEVEL,
+		format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+			   "<level>{level:<8}</level> | "
+			   "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+			   "<level>{message}</level>",
+		colorize=True
+	)
+	
+	# Добавляем обработчик для файла с ротацией
+	log_path = Path("logs") / "bot.log"
+	log_path.parent.mkdir(exist_ok=True)
+	
+	logger.add(
+		log_path,
+		level=config.LOG_LEVEL,
+		format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {name}:{function}:{line} - {message}",
+		rotation="10 MB",
+		retention="30 days",
+		compression="zip"
+	)
+
+
+async def main() -> None:
+	"""Главная функция запуска бота."""
+	# Настраиваем логирование
+	setup_logging()
+	
+	logger.info("Запуск StarinaVPN бота...")
+	
+	# Проверяем конфигурацию
+	try:
+		config.validate()
+	except ValueError as e:
+		logger.error(f"Ошибка конфигурации: {e}")
+		return
+	
+	# Инициализируем бота и диспетчер
+	bot = Bot(
+		token=config.BOT_TOKEN,
+		default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+	)
+	dp = Dispatcher()
+	
+	# Регистрируем middleware (порядок важен!)
+	dp.update.middleware(RegistrationMiddleware())
+	dp.update.middleware(BlockedUserMiddleware())
+	dp.update.middleware(ThrottleMiddleware(rate_limit=0.5, burst_limit=5))
+	
+	# Инициализируем базу данных
+	await init_db()
+	
+	# Устанавливаем команды бота
+	await set_commands(bot)
+	
+	# Регистрируем роутеры (хендлеры)
+	from handlers import start, menu, profile, key, purchase, callbacks, admin
+	
+	# Важен порядок: admin должен быть первым для обработки /admin
+	dp.include_router(admin.router)
+	dp.include_router(start.router)
+	dp.include_router(menu.router)
+	dp.include_router(profile.router)
+	dp.include_router(key.router)
+	dp.include_router(purchase.router)
+	dp.include_router(callbacks.router)
+	
+	# Обработка исключения CancelHandler для блокировки пользователей
+	@dp.errors()
+	async def cancel_handler(exception, event, data):
+		"""Обработка исключения CancelHandler - игнорируем его."""
+		if isinstance(exception, CancelHandler):
+			logger.debug(f"[CancelHandler] Заблокированное событие отклонено: {event}")
+			return None # Просто игнорируем
+		# Для других исключений - проброс дальше
+		raise exception
+	
+	# Запускаем планировщик
+	from services.scheduler import scheduler
+	scheduler.set_bot(bot)
+	scheduler.start()
+	
+	logger.info("Бот успешно запущен!")
+	
+	# Запускаем polling
+	try:
+		await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+	finally:
+		scheduler.stop()
+		await bot.session.close()
+		logger.info("Бот остановлен")
+
+
+if __name__ == "__main__":
+	try:
+		asyncio.run(main())
+	except (KeyboardInterrupt, SystemExit):
+		logger.info("Бот остановлен пользователем")
