@@ -95,14 +95,14 @@ async def main() -> None:
 	await set_commands(bot)
 	
 	# Регистрируем роутеры (хендлеры)
-	from handlers import start, menu, profile, key, purchase, callbacks, admin
+	from handlers import start, menu, profile, keys, purchase, callbacks, admin
 	
 	# Важен порядок: admin должен быть первым для обработки /admin
 	dp.include_router(admin.router)
 	dp.include_router(start.router)
 	dp.include_router(menu.router)
 	dp.include_router(profile.router)
-	dp.include_router(key.router)
+	dp.include_router(keys.router)
 	dp.include_router(purchase.router)
 	dp.include_router(callbacks.router)
 	
