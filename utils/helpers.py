@@ -259,3 +259,16 @@ def get_days_left(expires_at) -> int:
         return max(0, delta.days)
     
     return 0
+
+
+def get_user_balance_rub(balance_kopecks: int) -> str:
+    """
+    Форматирование баланса пользователя для отображения.
+    
+    Args:
+        balance_kopecks: Баланс в копейках
+        
+    Returns:
+        Строка с балансом в рублях
+    """
+    return format_balance(balance_kopecks)
