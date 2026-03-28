@@ -15,7 +15,8 @@ from loguru import logger
 from config import config
 from database import init_db
 from middlewares import RegistrationMiddleware, ThrottleMiddleware
-from middlewares.blocked import BlockedUserMiddleware, CancelHandler
+from middlewares.blocked import BlockedUserMiddleware
+from middlewares.blocked import CancelHandler
 
 
 async def set_commands(bot: Bot) -> None:
@@ -95,7 +96,7 @@ async def main() -> None:
 	await set_commands(bot)
 	
 	# Регистрируем роутеры (хендлеры)
-	from handlers import start, menu, profile, keys, purchase, callbacks, admin
+	from handlers import start, menu, profile, keys, purchase, callbacks, admin, topup, promocode
 	
 	# Важен порядок: admin должен быть первым для обработки /admin
 	dp.include_router(admin.router)
@@ -104,17 +105,22 @@ async def main() -> None:
 	dp.include_router(profile.router)
 	dp.include_router(keys.router)
 	dp.include_router(purchase.router)
+	dp.include_router(topup.router)
+	dp.include_router(promocode.router)
 	dp.include_router(callbacks.router)
 	
 	# Обработка исключения CancelHandler для блокировки пользователей
 	@dp.errors()
-	async def cancel_handler(exception, event, data):
+	async def cancel_handler(event, data):
 		"""Обработка исключения CancelHandler - игнорируем его."""
-		if isinstance(exception, CancelHandler):
+		exception = data.get("exception")
+		if exception and isinstance(exception, CancelHandler):
 			logger.debug(f"[CancelHandler] Заблокированное событие отклонено: {event}")
-			return None # Просто игнорируем
+			return None  # Просто игнорируем
 		# Для других исключений - проброс дальше
-		raise exception
+		exception = data.get("exception")
+		if exception:
+			raise exception
 	
 	# Запускаем планировщик
 	from services.scheduler import scheduler
