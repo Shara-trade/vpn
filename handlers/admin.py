@@ -154,7 +154,7 @@ async def cmd_admin(message: Message):
 
 # ================== РАЗДЕЛ ПОЛЬЗОВАТЕЛИ ==================
 
-@router.message(F.text == "Пользователи")
+@router.message(F.text == "👥 Пользователи")
 async def admin_users(message: Message, state: FSMContext):
     """Поиск пользователя."""
     if not is_admin(message.from_user.id):
@@ -163,11 +163,9 @@ async def admin_users(message: Message, state: FSMContext):
     await state.clear()
     
     await message.answer(
-        "🔍 Введи ID или @username пользователя для поиска:",
-        reply_markup=get_cancel_keyboard()
+        "👥 Управление пользователями",
+        reply_markup=get_admin_users_menu_keyboard()
     )
-    
-    await state.set_state(AdminStates.search_user)
 
 
 @router.message(AdminStates.search_user)
@@ -239,7 +237,7 @@ async def admin_search_user(message: Message, state: FSMContext):
 
 # ================== СПИСОК ПОЛЬЗОВАТЕЛЕЙ ==================
 
-@router.message(F.text == "Список пользователей")
+@router.message(F.text == "📋 Список пользователей")
 async def admin_users_list(message: Message, state: FSMContext):
     """Показ списка пользователей с пагинацией."""
     if not is_admin(message.from_user.id):
@@ -252,16 +250,15 @@ async def admin_users_list(message: Message, state: FSMContext):
     if not users:
         await message.answer(
             "👥 Пользователей пока нет",
-            reply_markup=get_admin_keyboard()
+            reply_markup=get_admin_users_menu_keyboard()
         )
         return
     
-    # Показываем первую страницу (10 пользователей)
-    keyboard = get_users_list_keyboard(users, page=0, per_page=10)
+    # Показываем первую страницу (8 пользователей по ТЗ)
+    keyboard = get_admin_users_list_keyboard(users, page=0, per_page=8)
     
     await message.answer(
-        f"👥 Список пользователей (всего: {len(users)})\n\n"
-        "Выбери пользователя:",
+        f"👥 Управление пользователями (всего: {len(users)})",
         reply_markup=keyboard
     )
 
@@ -275,11 +272,10 @@ async def callback_admin_users_page(callback: CallbackQuery):
     page = int(callback.data.split("_")[3])
     users = await queries.get_all_users()
     
-    keyboard = get_users_list_keyboard(users, page=page, per_page=10)
+    keyboard = get_admin_users_list_keyboard(users, page=page, per_page=8)
     
     await callback.message.edit_text(
-        f"👥 Список пользователей (всего: {len(users)})\n\n"
-        "Выбери пользователя:",
+        f"👥 Управление пользователями (всего: {len(users)})",
         reply_markup=keyboard
     )
     
@@ -394,7 +390,7 @@ async def admin_process_balance_amount(message: Message, state: FSMContext):
         f"Новый баланс: {format_balance(new_balance)} ₽",
         reply_markup=get_admin_balance_confirm_keyboard(amount_kopecks, target_user_id)
     )
-    
+
 
 @router.callback_query(F.data.startswith("admin_confirm_add_"))
 async def callback_admin_confirm_add(callback: CallbackQuery, state: FSMContext, bot: Bot):
@@ -699,7 +695,7 @@ async def callback_admin_history(callback: CallbackQuery):
 
 # ================== РАЗДЕЛ СТАТИСТИКА ==================
 
-@router.message(F.text == "Статистика")
+@router.message(F.text == "📊 Статистика")
 async def admin_stats(message: Message):
     """Показ статистики."""
     if not is_admin(message.from_user.id):
@@ -713,64 +709,54 @@ async def admin_stats(message: Message):
     month_sales = await queries.get_month_sales()
     avg_check = await queries.get_avg_check()
     
-    # Статистика по серверам
-    servers_stats = await queries.get_servers_stats()
+    # Статистика по серверам с нагрузкой
+    servers_stats = await queries.get_servers_with_load()
     
     servers_text = ""
     for stat in servers_stats:
         flag = get_country_flag(stat["country_code"])
         status = "✅" if stat["is_active"] else "❌"
-        servers_text += f"{flag} {stat['name']}: {stat['users_count']} польз.\n"
+        load = stat.get("load", 0)
+        capacity = stat.get("capacity", 200) or 200
+        load_percent = int(load / capacity * 100) if capacity > 0 else 0
+        servers_text += f"{status} {flag} {stat['name']}: {stat.get('users_count', 0)} польз., нагрузка {load_percent}%\n"
     
     await message.answer(
-        ADMIN_STATS_MESSAGE.format(
-            bot_name=BOT_NAME,
-            total_users=total_users,
-            active_today=active_today,
-            new_today=new_today,
-            total_balance=format_balance(total_balance),
-            month_sales=format_balance(month_sales),
-            avg_check=format_balance(avg_check),
-            servers_stats=servers_text or "Нет серверов"
-        )
+        f"📊 Статистика {BOT_NAME}\n\n"
+        f"👥 Всего пользователей: {total_users}\n"
+        f"✅ Активных сегодня: {active_today}\n"
+        f"🆕 Новых за сегодня: {new_today}\n\n"
+        f"💰 Общий баланс: {format_balance(total_balance)} ₽\n"
+        f"💵 Продажи за месяц: {format_balance(month_sales)} ₽\n"
+        f"📊 Средний чек: {format_balance(avg_check)} ₽\n\n"
+        f"🌍 По серверам:\n{servers_text or 'Нет серверов'}",
+        reply_markup=get_admin_stats_keyboard()
     )
 
 
 # ================== РАЗДЕЛ СЕРВЕРЫ ==================
 
-@router.message(F.text == "Серверы")
+@router.message(F.text == "🌍 Серверы")
 async def admin_servers(message: Message, state: FSMContext):
     """Управление серверами."""
     if not is_admin(message.from_user.id):
         return
     
     await state.clear()
+    servers = await queries.get_servers_with_load()
     
-    servers = await queries.get_active_servers()
-    all_servers = await db.fetchall("SELECT * FROM servers ORDER BY name")
+    text = "🌍 Управление серверами\n\n"
     
-    # Формируем список
-    servers_list = ""
-    for server in all_servers:
-        status = "✅" if server["is_active"] else "❌"
-        flag = get_country_flag(server["country_code"])
-        servers_list += f"{status} {flag} {server['name']} ({server['domain']})\n"
+    if servers:
+        for s in servers:
+            status = "✅" if s.get("is_active") else "❌"
+            flag = get_country_flag(s.get("country_code", ""))
+            users = s.get("users_count", 0)
+            capacity = s.get("capacity", 200) or 200
+            load = int(users / capacity * 100) if capacity > 0 else 0
+            text += f"{status} {flag} {s['name']} — {users} польз. — нагрузка {load}%\n"
     
-    # Считаем пользователей по серверам
-    users_by_server = ""
-    server_stats = await queries.get_servers_stats()
-    for stat in server_stats:
-        if stat["users_count"] > 0:
-            flag = get_country_flag(stat["country_code"])
-            users_by_server += f"{flag} {stat['name']}: {stat['users_count']} польз.\n"
-    
-    await message.answer(
-        ADMIN_SERVERS_MESSAGE.format(
-            servers_list=servers_list or "Нет серверов",
-            users_by_server=users_by_server or "Нет пользователей"
-        ),
-        reply_markup=get_admin_servers_keyboard(all_servers)
-    )
+    await message.answer(text, reply_markup=get_admin_servers_list_keyboard(servers))
 
 
 @router.callback_query(F.data == "admin_add_server")
@@ -808,7 +794,7 @@ async def admin_add_server_name(message: Message, state: FSMContext):
         "Введи код страны (2 буквы, например: NL, DE, US, RU):",
         reply_markup=get_admin_cancel_keyboard()
     )
-    
+
     await state.set_state(AdminStates.add_server_country)
 
 
@@ -831,7 +817,7 @@ async def admin_add_server_country(message: Message, state: FSMContext):
         "Введи домен (например: ams.freakvpn.ru):",
         reply_markup=get_admin_cancel_keyboard()
     )
-    
+
     await state.set_state(AdminStates.add_server_domain)
 
 
@@ -1060,7 +1046,7 @@ async def callback_admin_check_servers(callback: CallbackQuery):
 
 # ================== РАЗДЕЛ РАССЫЛКА ==================
 
-@router.message(F.text == "Рассылка")
+@router.message(F.text == "📨 Рассылка")
 async def admin_mailing(message: Message, state: FSMContext):
     """Создание рассылки."""
     if not is_admin(message.from_user.id):
@@ -1068,14 +1054,27 @@ async def admin_mailing(message: Message, state: FSMContext):
     
     await state.clear()
     
-    await message.answer(
-        "📨 Создание рассылки\n\n"
-        "Отправь мне сообщение (текст, фото или видео), "
-        "которое хочешь разослать всем пользователям.",
-        reply_markup=get_cancel_keyboard()
-    )
+    # Собираем статистику по аудиториям
+    all_users = await queries.get_users_count()
+    active_keys = await db.fetchval("SELECT COUNT(*) FROM user_keys WHERE is_active = 1") or 0
+    has_balance = await db.fetchval("SELECT COUNT(*) FROM users WHERE balance > 0") or 0
+    no_promo = all_users
+    expiring = len(await queries.get_expiring_keys(hours=72))
+    autorenew = await db.fetchval("SELECT COUNT(*) FROM user_keys WHERE auto_renew = 1 AND is_active = 1") or 0
     
-    await state.set_state(AdminStates.mailing_content)
+    audience_stats = {
+        "all": all_users,
+        "active_keys": active_keys,
+        "has_balance": has_balance,
+        "no_promo": no_promo,
+        "expiring": expiring,
+        "autorenew": autorenew,
+    }
+    
+    await message.answer(
+        "📨 Выбери аудиторию для рассылки:",
+        reply_markup=get_admin_mailing_audience_keyboard(audience_stats)
+    )
 
 
 @router.message(AdminStates.mailing_content)
@@ -1198,7 +1197,7 @@ async def callback_admin_send_all(callback: CallbackQuery, state: FSMContext, bo
 
 # ================== РАЗДЕЛ НАСТРОЙКИ ==================
 
-@router.message(F.text == "Настройки")
+@router.message(F.text == "⚙️ Настройки")
 async def admin_settings(message: Message, state: FSMContext):
     """Панель настроек."""
     if not is_admin(message.from_user.id):
@@ -1206,55 +1205,19 @@ async def admin_settings(message: Message, state: FSMContext):
     
     await state.clear()
     
-    # Получаем тарифы
     tariffs = await queries.get_tariffs()
-    
-    # Получаем настройки
-    trial_days = await queries.get_setting("trial_days")
-    referral_bonus_percent = await queries.get_setting_int("referral_bonus_percent", 15)
-    referral_min_topup = await queries.get_setting_int("referral_min_topup", 100)
-    min_topup = await queries.get_setting_int("min_topup", 50)
-    
-    # Формируем сообщение - ищем тарифы по days
-    price_7 = 0
-    price_1month = 0
-    price_3 = 0
-    price_6 = 0
-    price_12 = 0
-    
-    for tariff in tariffs:
-        days = tariff.get("days", 0)
-        price = tariff["price"] // 100
-        if days == 7:
-            price_7 = price
-        elif days == 30:
-            price_1month = price
-        elif days == 90:
-            price_3 = price
-        elif days == 180:
-            price_6 = price
-        elif days == 360:
-            price_12 = price
+    trial_days = await queries.get_setting_int("trial_days", 3)
+    min_topup = await queries.get_min_topup()
     
     await message.answer(
-        ADMIN_SETTINGS_MESSAGE.format(
-            price_7=price_7,
-            price_1=price_1month,
-            price_3=price_3,
-            price_6=price_6,
-            price_12=price_12,
-            trial_days=trial_days or "3",
-            referral_bonus_percent=referral_bonus_percent,
-            referral_min_topup=referral_min_topup,
-            min_topup=min_topup
-        ),
-        reply_markup=get_admin_settings_keyboard()
+        "⚙️ Настройки",
+        reply_markup=get_admin_settings_menu_keyboard(tariffs, trial_days, min_topup)
     )
 
 
 # ================== ПРОЧЕЕ ==================
 
-@router.message(F.text == "Прочее")
+@router.message(F.text == "⚙️ Прочее")
 async def admin_other(message: Message, state: FSMContext):
     """Раздел 'Прочее'."""
     if not is_admin(message.from_user.id):
@@ -1263,11 +1226,10 @@ async def admin_other(message: Message, state: FSMContext):
     await state.clear()
     
     await message.answer(
-        "⚙️ Дополнительные настройки\n\n"
-        "Выбери раздел:",
-        reply_markup=get_admin_other_keyboard()
+        "⚙️ Дополнительные настройки",
+        reply_markup=get_admin_other_menu_keyboard()
     )
-    
+
 
 # ================== НАВИГАЦИЯ ==================
 
@@ -1832,7 +1794,7 @@ async def callback_admin_confirm_withdraw(callback: CallbackQuery, state: FSMCon
 
 # ================== ЛОГИ ==================
 
-@router.message(F.text == "Логи")
+@router.message(F.text == "📋 Логи")
 async def admin_logs(message: Message, state: FSMContext):
     """Показ панели логов."""
     if not is_admin(message.from_user.id):
@@ -1840,13 +1802,9 @@ async def admin_logs(message: Message, state: FSMContext):
     
     await state.clear()
     
-    categories = await queries.get_log_categories()
-    keyboard = get_admin_logs_keyboard(categories)
-    
     await message.answer(
-        "📋 Панель логов\n\n"
-        "Выбери категорию для просмотра:",
-        reply_markup=keyboard
+        "📋 Выбери категорию логов:",
+        reply_markup=get_admin_logs_menu_keyboard()
     )
 
 
@@ -1911,33 +1869,6 @@ async def callback_admin_logs_back(callback: CallbackQuery, state: FSMContext):
 
 # ================== ПРОМОКОДЫ ==================
 
-@router.message(F.text == "Промокоды")
-async def admin_promocodes(message: Message, state: FSMContext):
-    """Управление промокодами."""
-    if not is_admin(message.from_user.id):
-        return
-    
-    await state.clear()
-    
-    promocodes = await queries.get_all_promocodes()
-    
-    text = "🎫 Управление промокодами\n\n"
-    
-    if promocodes:
-        text += "Существующие промокоды:\n"
-        for p in promocodes[:10]:
-            status = "✅" if p["is_active"] else "❌"
-            expires = f"до {format_date(p['expires_at'])}" if p.get("expires_at") else "бессрочно"
-            text += f"{status} {p['code']} — {p['used_count']}/{p['max_uses'] or '∞'} | {expires}\n"
-    else:
-        text += "Промокодов пока нет."
-    
-    await message.answer(
-        text,
-        reply_markup=get_admin_promocodes_keyboard()
-    )
-
-
 @router.message(F.text == "🎫 Промокоды")
 async def admin_promocodes(message: Message, state: FSMContext):
     """Управление промокодами."""
@@ -1948,20 +1879,45 @@ async def admin_promocodes(message: Message, state: FSMContext):
 
     promocodes = await queries.get_all_promocodes()
 
-    text = "🎫 Управление промокодами\n\n"
+    text = "🎫 Управление промокодами (всего: {})\n\n".format(len(promocodes))
     
     if promocodes:
-        text += "Существующие промокоды:\n"
-        for p in promocodes[:10]:
+        for p in promocodes:
             status = "✅" if p["is_active"] else "❌"
-            expires = f"до {format_date(p['expires_at'])}" if p.get("expires_at") else "бессрочно"
-            text += f"{status} {p['code']} — {p['used_count']}/{p['max_uses'] or '∞'} | {expires}\n"
+            promo_type = p.get("type", "")
+            
+            # Форматируем тип
+            if promo_type == "discount_percent":
+                type_text = f"скидка {p.get('value', 0)}%"
+            elif promo_type == "discount_fixed":
+                type_text = f"{p.get('value', 0) // 100}₽"
+            elif promo_type == "free_days":
+                type_text = f"{p.get('value', 0)} дней бесплатно"
+            elif promo_type == "balance":
+                type_text = f"{p.get('value', 0) // 100}₽ на баланс"
+            else:
+                type_text = promo_type
+            
+            used = p.get("used_count", 0)
+            max_uses = p.get("max_uses", 0)
+            limit_text = f"{used}/{max_uses}" if max_uses > 0 else f"{used}/∞"
+            
+            expires = p.get("expires_at")
+            if expires:
+                try:
+                    expires_text = format_date(expires)
+                except:
+                    expires_text = "бессрочно"
+            else:
+                expires_text = "бессрочно"
+            
+            text += f"{status} {p['code']} — {type_text} — {limit_text} — до {expires_text}\n"
     else:
         text += "Промокодов пока нет."
     
     await message.answer(
         text,
-        reply_markup=get_admin_promocodes_keyboard()
+        reply_markup=get_admin_promocodes_list_keyboard(promocodes)
     )
     
 
