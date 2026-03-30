@@ -111,14 +111,12 @@ async def main() -> None:
 	
 	# Обработка исключения CancelHandler для блокировки пользователей
 	@dp.errors()
-	async def cancel_handler(event, data):
+	async def cancel_handler(update, exception):
 		"""Обработка исключения CancelHandler - игнорируем его."""
-		exception = data.get("exception")
 		if exception and isinstance(exception, CancelHandler):
-			logger.debug(f"[CancelHandler] Заблокированное событие отклонено: {event}")
+			logger.debug(f"[CancelHandler] Заблокированное событие отклонено: {update}")
 			return None  # Просто игнорируем
 		# Для других исключений - проброс дальше
-		exception = data.get("exception")
 		if exception:
 			raise exception
 	
