@@ -192,7 +192,7 @@ async def admin_search_user(message: Message, state: FSMContext):
         await message.answer(
             "❌ Пользователь не найден.\n\n"
             "Попробуй другой ID или username:",
-            reply_markup=get_cancel_keyboard()
+            reply_markup=get_admin_cancel_keyboard()
         )
         return
     
@@ -287,6 +287,8 @@ async def callback_admin_user_search(callback: CallbackQuery, state: FSMContext)
     """Поиск пользователя из меню."""
     if not is_admin(callback.from_user.id):
         return
+    
+    await state.set_state(AdminStates.search_user)
     
     await callback.message.edit_text(
         "🔍 Введи ID или @username пользователя для поиска:",
@@ -1318,6 +1320,22 @@ async def callback_close_message(callback: CallbackQuery):
         await callback.message.delete()
     except Exception:
         await callback.message.edit_text("❌ Сообщение закрыто")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_cancel")
+async def callback_admin_cancel(callback: CallbackQuery, state: FSMContext):
+    """Отмена действия и возврат в главное меню."""
+    if not is_admin(callback.from_user.id):
+        return
+    
+    await state.clear()
+    
+    await callback.message.edit_text(
+        "🔐 Панель управления\n\n"
+        "Выбери раздел:",
+        reply_markup=get_admin_keyboard()
+    )
     await callback.answer()
 
 
