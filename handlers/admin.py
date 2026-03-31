@@ -446,9 +446,18 @@ async def callback_admin_confirm_add(callback: CallbackQuery, state: FSMContext,
     if not is_admin(callback.from_user.id):
         return
     
+    # Проверяем формат callback data
     parts = callback.data.split("_")
-    amount = int(parts[3])
-    target_user_id = int(parts[4])
+    if len(parts) < 5 or parts[3] == "server":
+        await callback.answer("❌ Ошибка данных", show_alert=True)
+        return
+    
+    try:
+        amount = int(parts[3])
+        target_user_id = int(parts[4])
+    except (ValueError, IndexError):
+        await callback.answer("❌ Ошибка данных", show_alert=True)
+        return
     
     admin_id = callback.from_user.id
     
@@ -494,7 +503,7 @@ async def callback_admin_confirm_add(callback: CallbackQuery, state: FSMContext,
     logger.info(
         f"Админ пополнил баланс: admin={admin_id}, user={target_user_id}, amount={amount}"
     )
-    
+
 
 @router.callback_query(F.data.startswith("admin_extend_"))
 async def callback_admin_extend(callback: CallbackQuery, state: FSMContext):
@@ -1003,7 +1012,7 @@ async def admin_add_server_password(message: Message, state: FSMContext):
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Подтвердить", callback_data="admin_confirm_add_server"),
+            InlineKeyboardButton(text="✅ Подтвердить", callback_data="admin_server_save"),
             InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel"),
         ]
     ])
@@ -1013,8 +1022,8 @@ async def admin_add_server_password(message: Message, state: FSMContext):
     await state.set_state(AdminStates.add_server_confirm)
 
 
-@router.callback_query(F.data == "admin_confirm_add_server")
-async def callback_admin_confirm_add_server(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data == "admin_server_save")
+async def callback_admin_server_save(callback: CallbackQuery, state: FSMContext):
     """Подтверждение добавления сервера с проверкой подключения."""
     if not is_admin(callback.from_user.id):
         return
