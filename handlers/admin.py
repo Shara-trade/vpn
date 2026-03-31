@@ -282,13 +282,59 @@ async def callback_admin_users_page(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "admin_user_search")
+async def callback_admin_user_search(callback: CallbackQuery, state: FSMContext):
+    """Поиск пользователя из меню."""
+    if not is_admin(callback.from_user.id):
+        return
+    
+    await callback.message.edit_text(
+        "🔍 Введи ID или @username пользователя для поиска:",
+        reply_markup=get_admin_user_search_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_users_list")
+async def callback_admin_users_list(callback: CallbackQuery, state: FSMContext):
+    """Список пользователей из меню."""
+    if not is_admin(callback.from_user.id):
+        return
+    
+    await state.clear()
+    users = await queries.get_all_users()
+    
+    if not users:
+        await callback.message.edit_text(
+            "👥 Пользователей пока нет",
+            reply_markup=get_admin_users_menu_keyboard()
+        )
+        return
+    
+    keyboard = get_users_list_keyboard(users, page=0, per_page=8)
+    await callback.message.edit_text(
+        f"👥 Список пользователей (всего: {len(users)})",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("admin_user_"))
 async def callback_admin_user_details(callback: CallbackQuery):
     """Просмотр информации о пользователе из списка."""
     if not is_admin(callback.from_user.id):
         return
     
-    user_id = int(callback.data.split("_")[2])
+    # Пропускаем специальные callback data
+    if callback.data in ["admin_user_search", "admin_users_list"]:
+        return
+    
+    try:
+        user_id = int(callback.data.split("_")[2])
+    except (ValueError, IndexError):
+        await callback.answer("❌ Ошибка", show_alert=True)
+        return
+    
     user = await queries.get_user(user_id)
     
     if not user:
