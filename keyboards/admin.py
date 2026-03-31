@@ -10,23 +10,13 @@ from typing import List, Dict
 # ================== ГЛАВНАЯ АДМИН КЛАВИАТУРА (Reply) ==================
 
 def get_admin_keyboard() -> ReplyKeyboardMarkup:
-    """Главная клавиатура админ-панели (Reply-кнопки по ТЗ)."""
+    """Главная клавиатура админ-панели (Reply-кнопки)."""
     keyboard = [
-        [
-            KeyboardButton(text="👥 Пользователи"),
-            KeyboardButton(text="📊 Статистика"),
-            KeyboardButton(text="🌍 Серверы"),
-        ],
-        [
-            KeyboardButton(text="⚙️ Прочее"),
-            KeyboardButton(text="📋 Логи"),
-            KeyboardButton(text="🎫 Промокоды"),
-        ],
-        [
-            KeyboardButton(text="⚙️ Настройки"),
-            KeyboardButton(text="📨 Рассылка"),
-            KeyboardButton(text="❌ Закрыть"),
-        ],
+        [KeyboardButton(text="👥 Пользователи"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="🌍 Серверы"), KeyboardButton(text="⚙️ Прочее")],
+        [KeyboardButton(text="📋 Логи"), KeyboardButton(text="🎫 Промокоды")],
+        [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="📨 Рассылка")],
+        [KeyboardButton(text="❌ Закрыть")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -450,11 +440,11 @@ def get_admin_users_list_keyboard(users: List[Dict], page: int = 0, per_page: in
     for user in users[page*per_page:(page+1)*per_page]:
         name = f"@{user.get('username', '')}" if user.get('username') else f"ID:{user['user_id']}"
         balance = user.get('balance', 0) // 100
-        status_icon = "✅" if user.get('status') == 'active' else "❌"
+        status_icon = "ON" if user.get('status') == 'active' else "OFF"
         keyboard.append([
             InlineKeyboardButton(
-                text=f"👤 {name} — {balance}₽ — {status_icon}",
-                callback_data=f"admin_user_card_{user['user_id']}"
+                text=f"👤 {name} - {balance}RUB - {status_icon}",
+                callback_data=f"admin_user_{user['user_id']}"
             )
         ])
     
