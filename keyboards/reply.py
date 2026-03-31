@@ -26,17 +26,17 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
 def get_admin_keyboard() -> ReplyKeyboardMarkup:
     """
     Клавиатура администратора (FreakVPN).
-    Обновлено по ТЗ v2 - с эмодзи.
+    С эмодзи для удобства.
     
     Returns:
         ReplyKeyboardMarkup с кнопками админ-панели
     """
     keyboard = [
-        [KeyboardButton(text="👥 Пользователи")],
-        [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🌍 Серверы")],
-        [KeyboardButton(text="📋 Список пользователей"), KeyboardButton(text="⚙️ Прочее")],
-        [KeyboardButton(text="📨 Рассылка"), KeyboardButton(text="📋 Логи")],
-        [KeyboardButton(text="🎫 Промокоды"), KeyboardButton(text="⚙️ Настройки")],
+        [KeyboardButton(text="👥 Пользователи"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="🌍 Серверы"), KeyboardButton(text="⚙️ Прочее")],
+        [KeyboardButton(text="📋 Логи"), KeyboardButton(text="🎫 Промокоды")],
+        [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="📨 Рассылка")],
+        [KeyboardButton(text="❌ Закрыть")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
