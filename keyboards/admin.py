@@ -424,7 +424,7 @@ def get_admin_user_search_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура для поиска пользователя (1.2.1)."""
     keyboard = [
         [InlineKeyboardButton(text="Назад", callback_data="admin_users")],
-        [InlineKeyboardButton(text="Закрыть", callback_data="close_message")],
+        [InlineKeyboardButton(text="Отмена", callback_data="admin_cancel")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
