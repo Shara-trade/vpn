@@ -111,15 +111,19 @@ async def main() -> None:
 	
 	# Обработка исключения CancelHandler для блокировки пользователей
 	@dp.errors()
-	async def error_handler(update, exception):
-		"""Обработка ошибок и исключения CancelHandler."""
+	async def error_handler(*args, **kwargs):
+		"""Обработка ошибок - просто логируем и игнорируем."""
+		# Получаем exception из разных возможных источников
+		exception = kwargs.get("exception")
+		if exception is None and len(args) >= 2:
+			exception = getattr(args[1], "exception", None)
+		
 		if exception and isinstance(exception, CancelHandler):
-			logger.debug(f"[CancelHandler] Заблокированное событие отклонено: {update}")
+			logger.debug(f"[CancelHandler] Заблокированное событие отклонено")
 			return None
-		# Для других исключений - логируем и не поднимаем
 		if exception:
 			logger.error(f"Ошибка в обработчике: {exception}")
-			return None
+		return None
 	
 	# Запускаем планировщик
 	from services.scheduler import scheduler
