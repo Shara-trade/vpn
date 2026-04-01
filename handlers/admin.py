@@ -989,7 +989,7 @@ async def admin_add_server_password(message: Message, state: FSMContext):
     data = await state.get_data()
     
     # Формируем API URL
-    api_url = f"http://{data['server_ip']}:{data['server_port']}"
+    api_url = f"https://{data['server_ip']}:{data['server_port']}"
     
     # Сохраняем все данные
     await state.update_data(
